@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Paint Palette Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        .result-section { margin-top: 20px; padding: 15px; background: #f4f4f4; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+    <h2>Upload a Painting</h2>
+    <form id="uploadForm">
+        <input type="file" id="paintingInput" accept="image/*" required><br><br>
+        <button type="submit">Analyze Colors</button>
+    </form>
+
+    <div id="results" class="result-section">
+        <h3>Required Base Paints:</h3>
+        <ul id="basePaints"></ul>
+        
+        <h3>Color Mixing Recipes:</h3>
+        <ul id="recipes"></ul>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('paintingInput');
+            const formData = new FormData();
+            formData.append('painting', fileInput.files[0]);
+
+            const response = await fetch('/analyze', { method: 'POST', body: formData });
+            const data = await response.json();
+
+            if (response.ok) {
+                // Clear old results
+                document.getElementById('basePaints').innerHTML = '';
+                document.getElementById('recipes').innerHTML = '';
+
+                // Display Base Paints
+                data.base_paints.forEach(paint => {
+                    const li = document.createElement('li');
+                    li.textContent = paint;
+                    document.getElementById('basePaints').appendChild(li);
+                });
+
+                // Display Recipes
+                data.color_mixtures.forEach(mix => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${mix.target_color}:</strong> ${mix.recipe}`;
+                    document.getElementById('recipes').appendChild(li);
+                });
+
+                document.getElementById('results').style.display = 'block';
+            } else {
+                alert('Error analyzing image');
+            }
+        });
+    </script>
+</body>
+</html>
