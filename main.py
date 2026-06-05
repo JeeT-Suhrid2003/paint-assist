@@ -2,22 +2,50 @@ from flask import Flask, render_template, request, jsonify
 from google.cloud import storage
 from google import genai
 from google.genai import types
+from google.auth.exceptions import DefaultCredentialsError
 import os
 import json
 
 app = Flask(__name__)
 
 # CONFIGURATION: Change these to match your GCP setup
-PROJECT_ID = "qwiklabs-gcp-01-a8bd18e62a60"
-BUCKET_NAME = "paint-1"
+PROJECT_ID = os.getenv("PROJECT_ID", "qwiklabs-gcp-02-acd8376254d1")
+BUCKET_NAME = os.getenv("BUCKET_NAME", "paint-2")
 
-# Initialize GCP Clients
-storage_client = storage.Client(project=PROJECT_ID)
-ai_client = genai.Client(
-    vertexai=True, 
-    project=PROJECT_ID, 
-    location="us-central1" # Or your preferred GCP region like 'asia-south1'
-)
+storage_client = None
+ai_client = None
+
+
+def get_storage_client():
+    global storage_client
+    if storage_client is None:
+        try:
+            storage_client = storage.Client(project=PROJECT_ID)
+        except DefaultCredentialsError as exc:
+            raise RuntimeError(
+                "Google Cloud credentials are not configured inside the container. "
+                "Set GOOGLE_APPLICATION_CREDENTIALS to a valid service account JSON file path."
+            ) from exc
+    return storage_client
+
+
+def get_ai_client():
+    global ai_client
+    if ai_client is None:
+        try:
+            ai_client = genai.Client(
+                vertexai=True,
+                project=PROJECT_ID,
+                location="us-west1"  # Or your preferred GCP region like 'asia-south1'
+            )
+        except DefaultCredentialsError as exc:
+            raise RuntimeError(
+                "Google Cloud credentials are not configured inside the container. "
+                "Set GOOGLE_APPLICATION_CREDENTIALS to a valid service account JSON file path."
+            ) from exc
+    return ai_client
+
+
 def analyze_painting_with_ai(file_bytes, mime_type):
     """Sends the painting image to Gemini to extract colors and recipes."""
     
@@ -38,6 +66,7 @@ def analyze_painting_with_ai(file_bytes, mime_type):
     )
     
     # Call the lightweight, multi-modal Gemini Flash model
+    ai_client = get_ai_client()
     response = ai_client.models.generate_content(
         model='gemini-2.5-flash',
         contents=[image_part, prompt]
@@ -74,9 +103,9 @@ def analyze():
 
     try:
         # 1. Save the file to Google Cloud Storage (The Bucket)
+        storage_client = get_storage_client()
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(file.filename)
-        # Rewind file pointer just in case, and upload
         blob.upload_from_string(file_bytes, content_type=mime_type)
         
         # 2. Get the real analysis from the Gemini Cloud Model
